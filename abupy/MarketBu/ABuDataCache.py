@@ -331,7 +331,7 @@ def dump_kline_df(dump_df, symbol_key, date_key):
             local_df_st = local_df[local_df.date < _start]
             local_df_ed = local_df[local_df.date > _end]
             # concat连起来三个部分
-            new_df = pd.concat([local_df_st, dump_df, local_df_ed])
+            new_df = pd.concat([local_df_st, dump_df, local_df_ed],sort=False)
             # 最终保存的为new_df
             dump_kline_func(symbol_key, date_key, new_df, delete_key=df_date_key)
     else:
