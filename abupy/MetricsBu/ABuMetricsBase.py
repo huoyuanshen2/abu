@@ -164,6 +164,11 @@ class AbuMetricsBase(object):
         self.benchmark_sharpe = stats.sharpe_ratio(self.benchmark_returns)
         # noinspection PyTypeChecker
         self.algorithm_sharpe = stats.sharpe_ratio(self.algorithm_returns)
+        # 针对夏普指数返回np.nan的处理。
+        if np.isnan(self.benchmark_sharpe):
+            self.benchmark_sharpe = 0
+        if np.isnan(self.algorithm_sharpe):
+            self.algorithm_sharpe = 0
 
         # 信息比率
         # noinspection PyUnresolvedReferences
