@@ -12,6 +12,8 @@ import copy
 
 import numpy as np
 
+from abupy.FactorBuyBu.ABuFactorBuyBigWave2 import AbuBigWave2
+from abupy.UtilBu.AbuEMAUtil import get_EMA
 from ..MarketBu import ABuSymbolPd
 from ..FactorBuyBu.ABuFactorBuyBase import AbuFactorBuyBase
 from ..FactorSellBu.ABuFactorSellBase import AbuFactorSellBase
@@ -46,7 +48,11 @@ class AbuPickTimeWorker(AbuPickTimeWorkBase):
         # 回测阶段kl
         self.kl_pd = kl_pd
         # 合并加上回测之前1年的数据，为了生成特征数据
+        # self.combine_kl_pd = None #添加掘金接口后，存在数据冲突，且效率慢。
         self.combine_kl_pd = ABuSymbolPd.combine_pre_kl_pd(self.kl_pd, n_folds=1)
+        # self.combine_kl_pd = None
+        self.pre_kl_pd = ABuSymbolPd.get_pre_kl_pd(self.kl_pd, n_folds=1)
+        # self.pre_kl_pd = None
         # 如特别在乎效率性能，打开下面注释的方式，只在g_enable_ml_feature模式下开启, 注释上一行
         # self.combine_kl_pd = ABuSymbolPd.combine_pre_kl_pd(self.kl_pd,
         #                                                    n_folds=1) if ABuEnv.g_enable_ml_feature else None
@@ -117,6 +123,17 @@ class AbuPickTimeWorker(AbuPickTimeWorkBase):
                 # 如果买入因子没有被封锁执行任务
                 buy_factor.fit_month(today)
 
+    def _first_day_task(self, today):
+        """
+        初始任务，只执行一次，可以作为选股因子考虑。
+        """
+        for buy_factor in self.month_buy_factors:
+            if not buy_factor.lock_factor:
+                # 如果买入因子没有被封锁执行任务
+                buy_factor.fit_month(today)
+
+
+
     def _day_task(self, today):
         """
         日任务：迭代买入卖出因子序列进行择时
@@ -134,8 +151,9 @@ class AbuPickTimeWorker(AbuPickTimeWorkBase):
         # 买入因子行为要在卖出因子下面，否则为高频日交易模式
         for buy_factor in self.buy_factors:
             # 如果择时买入因子没有被封锁执行任务
-            if not buy_factor.lock_factor:
+            if not buy_factor.lock_factor :
                 # 迭代买入因子，每个因子都对今天进行择时，如果生成order加入self.orders
+                buy_factor.orders = self.orders
                 order = buy_factor.read_fit_day(today)
                 if order and order.order_deal:
                     self.orders.append(order)
@@ -198,6 +216,7 @@ class AbuPickTimeWorker(AbuPickTimeWorkBase):
         if today.exec_month:
             # 执行因子月任务
             self._month_task(today)
+
         if today.exec_week:
             # 执行因子周任务
             self._week_task(today)
@@ -238,6 +257,13 @@ class AbuPickTimeWorker(AbuPickTimeWorkBase):
                 >>>>
             """
             self.kl_pd['month_task'] = np.where(self.kl_pd.shift(-1)['date'] - self.kl_pd['date'] > 60, 1, 0)
+
+        for buy_factor in self.buy_factors:
+            if isinstance(buy_factor,AbuBigWave2) :
+                self.kl_pd['ema10'] = get_EMA(self.kl_pd.close, 10)
+                self.kl_pd['ema60'] = get_EMA(self.kl_pd.close, 60)
+                self.kl_pd['bigWave2Status'] = 0
+
         # 通过pandas apply进行交易日递进择时
         self.kl_pd.apply(self._task_loop, axis=1)
 
@@ -297,7 +323,7 @@ class AbuPickTimeWorker(AbuPickTimeWorkBase):
             # pop出类信息后剩下的都为类需要的参数
             class_fac = factor_class_cp.pop('class')
             # 整合capital，kl_pd等实例化因子对象
-            factor = class_fac(self.capital, self.kl_pd, self.combine_kl_pd, self.benchmark, **factor_class_cp)
+            factor = class_fac(self.capital, self.kl_pd, self.combine_kl_pd,self.pre_kl_pd, self.benchmark, **factor_class_cp)
 
             if not isinstance(factor, AbuFactorBuyBase):
                 # 因子对象类型检测
