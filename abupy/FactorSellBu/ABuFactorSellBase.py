@@ -100,13 +100,13 @@ class AbuFactorSellBase(six.with_metaclass(ABCMeta, AbuParamBase)):
         """
         order.fit_sell_order(self.today_ind, self)
 
-    def sell_today(self, order):
+    def sell_today(self, order,usePrice = 0):
         """
         今天即进行卖出操作，需要不能使用今天的收盘数据等做为fit_day中信号判断，
         适合如比特币非明确一天交易日时间或者特殊情况的卖出信号
         :param order交易订单AbuOrder对象
         """
-        order.fit_sell_order(self.today_ind - 1, self)
+        order.fit_sell_order(self.today_ind - 1, self,usePrice = usePrice)
 
     @abstractmethod
     def _init_self(self, **kwargs):

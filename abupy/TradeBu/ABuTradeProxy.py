@@ -14,6 +14,7 @@ from enum import Enum
 import numpy as np
 import pandas as pd
 
+from abupy.CoreBu import ABuEnv
 from . import ABuTradeDrawer
 from . import ABuTradeExecute
 
@@ -275,7 +276,8 @@ def trade_summary(orders, kl_pd, draw=False, show_info=True):
     action_pd = ABuTradeExecute.transform_action(orders_pd)
 
     summary = ''
-    if draw:
+
+    if  ABuEnv.draw_order_num >= 1:
         # 绘制每笔交易的细节交易图
         ABuTradeDrawer.plot_his_trade(orders, kl_pd)
 

@@ -17,7 +17,7 @@ __author__ = '阿布'
 __weixin__ = 'abu_quant'
 
 
-class WidgetEnvSetMixin(object):
+class WidgetEnvSetMixin2(object):
     """
         使用混入而不要做为上层widget拥有的模式，可为多个上层使用
         便于上层widgte使用self去获取设置，统一上层使用
@@ -38,12 +38,9 @@ class WidgetEnvSetMixin(object):
             description=u'数据模式:',
             disabled=False
         )
-        self.date_mode.observe(self.on_data_mode_change, names='value')
-
-        set_mode_label_tip = widgets.Label(u'缓存模式|联网模式|数据源只在开放数据模式下生效：',
-                                           layout=widgets.Layout(width='300px', align_items='stretch'))
-
-        """csv模式与hdf5模式模式切换"""
+        #沙盒模糊，设置如下两个值。
+        ABuEnv.enable_example_env_ipython(show_log=False)
+        # """csv模式与hdf5模式模式切换"""
         self.store_mode_dict = {EDataCacheType.E_DATA_CACHE_CSV.value: u'csv模式(推荐)',
                                 EDataCacheType.E_DATA_CACHE_HDF5.value: u'hdf5模式'}
         self.store_mode = widgets.RadioButtons(
@@ -52,7 +49,26 @@ class WidgetEnvSetMixin(object):
             description=u'缓存模式:',
             disabled=False
         )
-        self.store_mode.observe(self.on_data_store_change, names='value')
+        # self.store_mode.disabled = True
+        # self.fetch_mode.disabled = True
+
+        # self.date_mode.observe(self.on_data_mode_change, names='value') #改变触发的方法。
+
+        # set_mode_label_tip = widgets.Label(u'缓存模式|联网模式|数据源只在开放数据模式下生效：',
+        #                                    layout=widgets.Layout(width='300px', align_items='stretch'))
+
+        # """csv模式与hdf5模式模式切换"""
+        # self.store_mode_dict = {EDataCacheType.E_DATA_CACHE_CSV.value: u'csv模式(推荐)',
+        #                         EDataCacheType.E_DATA_CACHE_HDF5.value: u'hdf5模式'}
+        # self.store_mode = widgets.RadioButtons(
+        #     options=[u'csv模式(推荐)', u'hdf5模式'],
+        #     value=self.store_mode_dict[ABuEnv.g_data_cache_type.value],
+        #     description=u'缓存模式:',
+        #     disabled=False
+        # )
+        # self.store_mode.observe(self.on_data_store_change, names='value')
+        # 确定csv模式
+        ABuEnv.g_data_cache_type = EDataCacheType.E_DATA_CACHE_CSV.value #设置数据缓存模式
 
         """数据获取模式模式切换"""
         self.fetch_mode_dict = {EMarketDataFetchMode.E_DATA_FETCH_FORCE_LOCAL.value: u'本地数据模式(推荐)',
@@ -64,7 +80,10 @@ class WidgetEnvSetMixin(object):
             description=u'联网模式:',
             disabled=False
         )
-        self.fetch_mode.observe(self.on_fetch_mode_change, names='value')
+
+        self.fetch_mode.value = self.fetch_mode_dict[ABuEnv.g_data_fetch_mode.value] #myfunction尽量从本地获取
+
+        # self.fetch_mode.observe(self.on_fetch_mode_change, names='value')
 
         """数据源进行切换"""
         self.data_source_accordion = widgets.Accordion()
@@ -98,14 +117,14 @@ class WidgetEnvSetMixin(object):
         self.data_source_accordion.set_title(0, u'缓存模式|联网模式|数据源')
         accordion_shut(self.data_source_accordion)
 
-        mdm_box = widgets.VBox([self.date_mode, set_mode_label_tip, self.data_source_accordion])
+        # mdm_box = widgets.VBox([self.date_mode, set_mode_label_tip, self.data_source_accordion])
+        #
+        # if ABuEnv._g_enable_example_env_ipython:
+        #     # 非沙盒数据下数据存贮以及数据获取模式切换才生效
+        #     self.store_mode.disabled = True
+        #     self.fetch_mode.disabled = True
 
-        if ABuEnv._g_enable_example_env_ipython:
-            # 非沙盒数据下数据存贮以及数据获取模式切换才生效
-            self.store_mode.disabled = True
-            self.fetch_mode.disabled = True
-
-        return mdm_box
+        # return mdm_box
 
     def on_data_mode_change(self, change):
         """沙盒与非沙盒数据界面操作转换"""
@@ -114,7 +133,7 @@ class WidgetEnvSetMixin(object):
             self.store_mode.disabled = True
             self.fetch_mode.disabled = True
             accordion_shut(self.data_source_accordion)
-        else:
+        else: #开放数据模式
             if ABuFileUtil.file_exist(ABuEnv.g_project_kl_df_data_csv) and \
                             len(os.listdir(ABuEnv.g_project_kl_df_data_csv)) > 5000:
                 # 如果有很多缓存数据，从沙盒改变依然网络模式是本地模式
@@ -148,7 +167,7 @@ class WidgetEnvSetMixin(object):
         ABuEnv.g_market_source = date_source_dict[change['new']]
 
 
-class WidgetTimeModeMixin(object):
+class WidgetTimeModeMixin2(object):
     """
         使用混入而不要做为上层widget拥有的模式，可为多个上层使用
         便于上层widgte使用self去获取设置，统一上层使用
@@ -168,7 +187,8 @@ class WidgetTimeModeMixin(object):
             description=u'时间模式:',
             disabled=False
         )
-        self.time_mode.observe(self.on_time_mode_change, names='value')
+
+        # self.time_mode.observe(self.on_time_mode_change, names='value')
 
         # 年数模式
         self.run_years = widgets.BoundedIntText(
@@ -192,11 +212,12 @@ class WidgetTimeModeMixin(object):
             description=u'结束日期:',
             disabled=False
         )
+        # 默认日期模式
         self.run_years.disabled = False
         self.start.disabled = True
         self.end.disabled = True
 
-        return widgets.VBox([self.time_mode, self.run_years, self.start, self.end])
+        # return widgets.VBox([self.time_mode, self.run_years, self.start, self.end])
 
     def on_time_mode_change(self, change):
         """切换使用年数还是起始，结束时间做为回测参数"""
@@ -214,7 +235,7 @@ class WidgetTimeModeMixin(object):
         raise NotImplementedError('NotImplementedError time_mode_str!')
 
 
-class WidgetMetricsSet(object):
+class WidgetMetricsSet2(object):
     """
         使用混入而不要做为上层widget拥有的模式，可为多个上层使用
         便于上层widgte使用self去获取设置，统一上层使用
@@ -308,7 +329,7 @@ class WidgetMetricsSet(object):
         return accordion
 
 
-class WidgetRunTT(WidgetBase, WidgetEnvSetMixin, WidgetTimeModeMixin, WidgetMetricsSet):
+class WidgetRunTT2(WidgetBase, WidgetEnvSetMixin2, WidgetTimeModeMixin2, WidgetMetricsSet2):
     """基础设置界面：初始资金，回测开始，结束周期，参考大盘等"""
 
     def __init__(self):
@@ -324,7 +345,7 @@ class WidgetRunTT(WidgetBase, WidgetEnvSetMixin, WidgetTimeModeMixin, WidgetMetr
         )
         tm_box = self.init_time_mode_ui()
         mdm_box = self.init_env_set_ui()
-        metrics_box = self.init_metrics_ui() #回测度量结果设置
+        metrics_box = self.init_metrics_ui()
 
         self.widget = widgets.VBox([self.cash, tm_box, mdm_box, metrics_box])
 

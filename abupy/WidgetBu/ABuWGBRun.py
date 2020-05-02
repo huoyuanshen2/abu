@@ -42,19 +42,19 @@ class WidgetRunLoopBack(WidgetBase):
     # noinspection PyProtectedMember
     def __init__(self):
         """构建回测需要的各个组件形成tab"""
-        self.tt = WidgetRunTT()
-        self.sc = WidgetSymbolChoice()
-        self.bf = BuyFactorWGManager()
+        self.tt = WidgetRunTT() #资金、数据源设置
+        self.sc = WidgetSymbolChoice() #股池
+        self.bf = BuyFactorWGManager() #买入因子
 
-        self.sf = SellFactorWGManager()
+        self.sf = SellFactorWGManager() #卖出因子
         # 卖出策略管理注册买入策略接收改变
         self.sf.register(self.bf)
 
-        self.ps = PickStockWGManager()
+        self.ps = PickStockWGManager()  #选股策略
         # 选股策略管理注册买入策略接收改变
         self.ps.register(self.bf)
 
-        self.pos = PosWGManager()
+        self.pos = PosWGManager() #资产管理
         # 资金管理注册买入策略接收改变
         self.pos.register(self.bf)
 

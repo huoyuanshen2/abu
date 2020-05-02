@@ -97,6 +97,8 @@ class AbuBaseScorer(six.with_metaclass(ABCMeta, object)):
         # 分数每一项都由0-1
         score_ls = np.linspace(0, 1, self.score_pd.shape[0])
         for cn in self.columns_name:
+            if cn not in ['win_rate', 'returns', 'sharpe', 'max_drawdown']:
+                continue
             # 每一项的结果rank后填入对应项
             score = score_ls[(self.score_pd[cn].rank().values - 1).astype(int)]
             self.score_pd['score_' + cn] = score
@@ -131,9 +133,12 @@ class WrsmScorer(AbuBaseScorer):
 
         self.select_score_func = lambda metrics: [metrics.win_rate, metrics.algorithm_period_returns,
                                                   metrics.algorithm_sharpe,
-                                                  metrics.max_drawdown]
-        self.columns_name = ['win_rate', 'returns', 'sharpe', 'max_drawdown']
-        self.weights_cnt = len(self.columns_name)
+                                                  metrics.max_drawdown,metrics.orders_count,
+                                                  metrics.algorithm_annualized_returns,
+                                                  metrics.gains_mean,metrics.losses_mean,metrics.all_profit,metrics.buy_factor]
+        self.columns_name = ['win_rate', 'returns', 'sharpe', 'max_drawdown','orders_count',
+                             'algorithm_annualized_returns','gains_mean','losses_mean','all_profit','buy_factor']
+        self.weights_cnt = 4  # 权重计算因子数，这里只需要4个
 
     def _init_self_end(self, *arg, **kwargs):
         """

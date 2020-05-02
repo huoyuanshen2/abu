@@ -63,6 +63,8 @@ pd.options.mode.chained_assignment = None
 
 """numpy，pandas显示控制，默认开启"""
 g_display_control = True
+"""raw_order_num:具体显示几个订单图表，默认0"""
+raw_order_num = 0
 if g_display_control:
     # pandas DataFrame表格最大显示行数
     pd.options.display.max_rows = 20
@@ -146,7 +148,8 @@ def str_is_cn(a_str):
     return is_cn_path
 
 
-root_drive = path.expanduser('~')
+# root_drive = path.expanduser('~')
+root_drive = 'D:\\abuCSVdir'
 # root_drive = os.path.join(root_drive, u'测试')
 # noinspection PyTypeChecker
 

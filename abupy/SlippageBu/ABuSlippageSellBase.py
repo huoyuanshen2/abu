@@ -23,7 +23,7 @@ __weixin__ = 'abu_quant'
 class AbuSlippageSellBase(six.with_metaclass(ABCMeta, object)):
     """非高频日内滑点卖出决策抽象基类"""
 
-    def __init__(self, kl_pd_sell, factor_name):
+    def __init__(self, kl_pd_sell, factor_name,order=None):
         """
         :param kl_pd_sell: 交易当日的交易数据
         :param factor_name: ABuFactorSellBase实例对象的factor_name
@@ -31,6 +31,7 @@ class AbuSlippageSellBase(six.with_metaclass(ABCMeta, object)):
         self.sell_price = np.inf
         self.kl_pd_sell = kl_pd_sell
         self.factor_name = factor_name
+        self.order = order
 
     def fit(self):
         """做基础验证比如今天是否停盘后调用fit_price"""

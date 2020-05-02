@@ -39,6 +39,10 @@ def code_to_symbol(code, rs=True):
     sub_market = None
     market = None
     # 尝试获取市场信息
+    if code[:4] == 'SHSE' :
+        code = 'sh'+str(code[5:])
+    elif code[:4] == 'SZSE' :
+        code = 'sz'+str(code[5:])
     head = code[:2].lower()
     if head in [EMarketSubType.SH.value, EMarketSubType.SZ.value] and code[2:].isdigit():
         # 市场信息匹配沪深股，查询子市场

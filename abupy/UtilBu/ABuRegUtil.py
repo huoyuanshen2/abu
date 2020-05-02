@@ -296,7 +296,7 @@ def least_valid_poly(y, zoom=False, show=True, metrics_func=metrics_rmse):
     """
     poly = 1
     while poly < 100:
-        valid = valid_poly(y, poly=poly, zoom=zoom, show=False, metrics_func=metrics_func)
+        valid = valid_poly(y, poly=poly, zoom=zoom, show=True, metrics_func=metrics_func)
         if valid:
             if show:
                 # 这里如果show，就再来了一遍，没在乎效率，在考虑效率情况下不要使用show

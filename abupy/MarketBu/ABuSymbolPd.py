@@ -8,10 +8,13 @@ from __future__ import division
 from __future__ import print_function
 
 import logging
+import time
 from collections import Iterable
 
 import pandas as pd
+import numpy as np
 
+import abupy
 from .ABuDataSource import kline_pd
 from ..MarketBu.ABuDataCache import save_kline_df, check_csv_local
 from ..MarketBu.ABuSymbol import code_to_symbol
@@ -50,7 +53,8 @@ def _benchmark(df, benchmark, symbol):
         return None
 
     # 两个金融时间序列通过loc寻找交集
-    kl_pd = df.loc[benchmark.kl_pd.index]
+    # kl_pd = df.loc[benchmark.kl_pd.index,df.columns]
+    kl_pd = df.reindex(benchmark.kl_pd.index)
     # nan的date个数即为不相交的个数
     nan_cnt = kl_pd['date'].isnull().value_counts()
     # 两个金融序列是否相同的结束日期
@@ -137,7 +141,15 @@ def _make_kl_df(symbol, data_mode, n_folds, start, end, benchmark, save):
         # 根据df长度重新进行key计算
         df['key'] = list(range(0, len(df)))
         temp_symbol = save_kl_key[0]
+        df['stockCode'] = symbol
         df.name = temp_symbol.value
+
+        if hasattr(symbol,'symbol_code') and symbol.symbol_code == '000001':
+            return df, save_kl_key
+        # if hasattr(ABuEnv,'benchmark'):
+        #     bench_pd = ABuEnv.benchmark
+        # else:
+
     return df, save_kl_key
 
 
@@ -358,14 +370,27 @@ def combine_pre_kl_pd(kl_pd, n_folds=1):
     # 获取kl_pd的起始时间
     end = ABuDateUtil.timestamp_to_str(kl_pd.index[0])
     # kl_pd的起始时间做为end参数通过make_kl_df和n_folds参数获取之前的一段时间序列
-    pre_kl_pd = make_kl_df(kl_pd.name, data_mode=ABuEnv.EMarketDataSplitMode.E_DATA_SPLIT_SE, n_folds=n_folds,
-                           end=end)
+    pre_kl_pd = make_kl_df(kl_pd.name, data_mode=ABuEnv.EMarketDataSplitMode.E_DATA_SPLIT_SE, n_folds=n_folds,end=end)
     # 再合并两段时间序列，pre_kl_pd[:-1]跳过重复的end
-    combine_kl = kl_pd if pre_kl_pd is None else pre_kl_pd[:-1].append(kl_pd)
+    combine_kl = kl_pd if pre_kl_pd is None else pre_kl_pd[:-1].append(kl_pd,sort = False)
     # 根据combine_kl长度重新进行key计算
     combine_kl['key'] = list(range(0, len(combine_kl)))
     return combine_kl
 
+
+def get_pre_kl_pd(kl_pd, n_folds=1):
+    """
+    通过传人一个kl_pd获取这个kl_pd之前n_folds年时间的kl，只返回之前的数据
+    :param kl_pd: 金融时间序列pd.DataFrame对象
+    :param n_folds: 获取之前n_folds年的数据
+    """
+
+    # 获取kl_pd的起始时间
+    end = ABuDateUtil.timestamp_to_str(kl_pd.index[0])
+    # kl_pd的起始时间做为end参数通过make_kl_df和n_folds参数获取之前的一段时间序列
+    pre_kl_pd = make_kl_df(kl_pd.name, data_mode=ABuEnv.EMarketDataSplitMode.E_DATA_SPLIT_SE, n_folds=n_folds,
+                           end=end)
+    return pre_kl_pd
 
 def calc_atr(kline_df):
     """

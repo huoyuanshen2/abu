@@ -8,6 +8,7 @@ from __future__ import absolute_import
 from __future__ import division
 
 import logging
+import time
 
 from ..TradeBu import AbuBenchmark
 from ..UtilBu import ABuDateUtil
@@ -54,10 +55,11 @@ def gen_dict_pick_time_kl_pd(target_symbols, capital, benchmark, show_progress=T
         # 启动多进程进度条
         with AbuMulPidProgress(len(target_symbols), 'gen kl_pd complete', show_progress=show_progress) as progress:
             for epoch, target_symbol in enumerate(target_symbols):
+                # time.sleep(1)
                 progress.show(epoch + 1)
                 # 迭代target_symbols，获取对应时间交易序列
                 kl_pd = ABuSymbolPd.make_kl_df(target_symbol, data_mode=EMarketDataSplitMode.E_DATA_SPLIT_UNDO,
-                                               benchmark=benchmark, n_folds=benchmark.n_folds)
+                                               benchmark=benchmark, n_folds=benchmark.n_folds,start=benchmark.start,end=benchmark.end)
                 # 以target_symbol为key将时间金融序列kl_pd添加到返回字典中
                 pick_kl_pd_dict[target_symbol] = kl_pd
     _batch_gen_dict_pick_time_kl_pd()

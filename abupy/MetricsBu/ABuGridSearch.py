@@ -7,11 +7,17 @@ from __future__ import division
 import operator
 from collections import Mapping
 from functools import reduce
+
+from abupy.CoreBu.ABuStore import store_python_obj, load_python_obj
+from abupy.IndicatorBu.ABuNDMa import calc_ma_from_prices
+from abupy.UtilBu import AbuIndustryDataUtil
 from ..CoreBu.ABuFixes import partial
 from itertools import product, chain
 
 import logging
 import numpy as np
+import pandas as pd
+import tushare as ts
 
 from ..TradeBu.ABuBenchmark import AbuBenchmark
 from ..TradeBu.ABuCapital import AbuCapital
@@ -362,7 +368,8 @@ class GridSearch(object):
         return scores, score_tuple_array
 
     def __init__(self, read_cash, choice_symbols, stock_pickers_product=None,
-                 buy_factors_product=None, sell_factors_product=None, score_weights=None, metrics_class=None):
+                 buy_factors_product=None, sell_factors_product=None, score_weights=None,
+                 metrics_class=None, start=None, end=None, n_folds=2, concept='temp', getNewKlPDData=True,getIndustryData=False):
         """
         :param read_cash: 初始化资金数(int)
         :param choice_symbols: 初始备选交易对象序列
@@ -373,7 +380,8 @@ class GridSearch(object):
         :param metrics_class: make_scorer中设置的度量类
         """
         self.read_cash = read_cash
-        self.benchmark = AbuBenchmark()
+        self.benchmark = AbuBenchmark(start=start, end=end, n_folds=n_folds)
+        ABuEnv.benchmark = self.benchmark.kl_pd
         self.kl_pd_manager = AbuKLManager(self.benchmark, AbuCapital(self.read_cash, self.benchmark))
         self.choice_symbols = choice_symbols
         self.stock_pickers_product = [None] if stock_pickers_product is None else stock_pickers_product
@@ -381,6 +389,23 @@ class GridSearch(object):
         self.sell_factors_product = [None] if sell_factors_product is None else sell_factors_product
         self.score_weights = score_weights
         self.metrics_class = metrics_class
+        temp_var  = None
+        if hasattr(ABuEnv,'date_str') and getNewKlPDData == False :
+            temp_var  = load_python_obj('spick_kl_pd_dict' + ABuEnv.date_str)
+        if temp_var is None:
+            self.kl_pd_manager.batch_get_pick_time_kl_pd(choice_symbols,
+                                                     n_process= 1)
+            # kl_pd_dick = self.kl_pd_manager.pick_kl_pd_dict['pick_time']
+            # for stockCode, stockData in kl_pd_dick.items():
+            #     stockData['ema300'] = calc_ma_from_prices(stockData.close, int(self.ma_fast), min_periods=1)
+
+            if hasattr(ABuEnv, 'date_str')  and getNewKlPDData == False:
+                store_python_obj(self.kl_pd_manager.pick_kl_pd_dict['pick_time'], 'spick_kl_pd_dict' + ABuEnv.date_str, show_log=False)
+        else :
+            self.kl_pd_manager.pick_kl_pd_dict['pick_time'] = temp_var
+
+        if getIndustryData == True:
+            AbuIndustryDataUtil.getIndustryData(self.kl_pd_manager,concept=concept)
 
     def fit(self, score_class=WrsmScorer, n_jobs=-1):
         """
@@ -395,8 +420,8 @@ class GridSearch(object):
             # 如果没有设置选股因子，外层统一进行交易数据收集，之所以是1，以为在__init__中[None]的设置
             need_batch_gen = self.kl_pd_manager.filter_pick_time_choice_symbols(self.choice_symbols)
             # grid多进程symbol数量大于40才使用多进程，否则单进程执行
-            self.kl_pd_manager.batch_get_pick_time_kl_pd(need_batch_gen,
-                                                         n_process=ABuEnv.g_cpu_cnt if len(need_batch_gen) > 40 else 1)
+            # self.kl_pd_manager.batch_get_pick_time_kl_pd(need_batch_gen,
+            #                                              n_process=ABuEnv.g_cpu_cnt if len(need_batch_gen) > 40 else 1)
             pass_kl_pd_manager = self.kl_pd_manager
 
         if n_jobs <= 0:
@@ -431,9 +456,64 @@ class GridSearch(object):
         ABuProgress.do_check_process_is_dead()
         # 返回的AbuScoreTuple序列转换score_tuple_array, 即摊开多个子结果序列eg: ([], [], [], [])->[]
         score_tuple_array = list(chain.from_iterable(out_abu_score_tuple))
+        score_tuple_array2 = []
+        for temp in score_tuple_array:
+            if type(None) != type(temp.orders_pd):
+                score_tuple_array2.append(temp)
+        score_tuple_array = score_tuple_array2
+        if len(score_tuple_array) == 0 :
+            return None,None
         # 使用ABuMetricsScore中make_scorer对多个参数组合的交易结果进行评分，详情阅读ABuMetricsScore模块
         scores = make_scorer(score_tuple_array, score_class, weights=self.score_weights,
                              metrics_class=self.metrics_class)
         # 评分结果最好的赋予best_score_tuple_grid
         self.best_score_tuple_grid = score_tuple_array[scores.index[-1]]
         return scores, score_tuple_array
+
+
+
+    def fit4JiJin(self, score_class=WrsmScorer, n_jobs=-1,isJiJin=True,showWindowBuy=True,showWindowSell=False,concept=None,keysObj=None):
+        """
+        寻找基金组合因子
+        isJiJin :0 股票处理。1：基金处理。
+        """
+        if n_jobs <= 0:
+            # 因为下面要根据n_jobs来split_k_market
+            n_jobs = 1
+            # n_jobs = ABuEnv.g_cpu_cnt
+        factors_product = [{'buy_factors': item[0], 'sell_factors': item[1], 'stock_pickers': item[2]} for item in
+                           product(self.buy_factors_product, self.sell_factors_product, self.stock_pickers_product)]
+
+        # 将factors切割为n_jobs个子序列，这样可以每个进程处理一个子序列
+        process_factors = split_k_market(n_jobs, market_symbols=factors_product)
+        # 因为切割会有余数，所以将原始设置的进程数切换为分割好的个数, 即32 -> 33 16 -> 17
+        n_jobs = len(process_factors)
+        parallel = Parallel(
+            n_jobs=n_jobs, verbose=0, pre_dispatch='2*n_jobs')
+        # 多任务环境下的内存环境拷贝对象AbuEnvProcess
+        p_nev = AbuEnvProcess()
+        # 多层迭代各种类型因子，没一种因子组合作为参数启动一个新进程，运行grid_search_mul_process
+        out_abu_score_tuple = parallel(
+            delayed(grid_search_mul_process4jijin)(self.read_cash, self.benchmark, factors,
+                                             self.choice_symbols, kl_pd_manager=self.kl_pd_manager, env=p_nev,isJiJin=isJiJin,
+                                                   showWindowBuy=showWindowBuy,showWindowSell=showWindowSell,
+                                                   concept=concept,showMuti=keysObj['showMutil'])
+            for factors in process_factors)
+        ABuProgress.do_check_process_is_dead()
+        # 返回的AbuScoreTuple序列转换score_tuple_array, 即摊开多个子结果序列eg: ([], [], [], [])->[]
+        return None,None
+
+@add_process_env_sig
+def grid_search_mul_process4jijin(read_cash, benchmark, factors, choice_symbols, kl_pd_manager=None,
+                                  isJiJin=True,showWindowBuy=False,showWindowSell=True,concept=None,showMuti=False):
+    for epoch, factor in enumerate(factors):
+        buy_factors = factor['buy_factors']
+        for buy_factor in buy_factors:
+            from abupy.UtilBu.AbuJiJinDataUtil import jiJinPlot
+            # jiJinPlot(choice_symbols,buy_factor['startDate'],buy_factor['endDate'],
+            #           buy_factor['windowBuy'],buy_factor['windowSell'],buy_factor['poly'],isJiJin=isJiJin,showWindowBuy=showWindowBuy,showWindowSell=showWindowSell,concept=concept,kl_pd_manager=kl_pd_manager)
+            jiJinPlot(jiJinCodes = [buy_factor['jiJinCode']],startDate=buy_factor['startDate'],endDate=buy_factor['endDate'],
+                      windowBuy=buy_factor['windowBuy'],windowSell=buy_factor['windowSell'],poly=buy_factor['poly'],isJiJin=isJiJin,showWindowBuy=showWindowBuy,
+                      showWindowSell=showWindowSell,concept=concept,kl_pd_manager=kl_pd_manager,showMulti=showMuti)
+    return None
+

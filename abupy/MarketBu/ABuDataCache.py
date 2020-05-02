@@ -11,6 +11,7 @@ import os
 
 import pandas as pd
 
+from abupy.UtilBu.AbuJiJinDataUtil import getJiJinData4JueJin
 from ..CoreBu.ABuEnv import EDataCacheType, EMarketTargetType, EMarketSubType
 from ..CoreBu import ABuEnv
 from ..UtilBu.ABuFileUtil import load_df_csv, load_hdf5, ensure_dir, file_exist, del_file, dump_df_csv, \
@@ -301,7 +302,7 @@ def dump_kline_df(dump_df, symbol_key, date_key):
             # 选取dump_df.date < df_start部分
             new_df = dump_df[dump_df.date < df_start]
             # concat连起来两部分
-            new_df = pd.concat([new_df, h5_df])
+            new_df = pd.concat([new_df, h5_df],sort=False)
             # 最终保存的为new_df
             dump_kline_func(symbol_key, date_key, new_df, delete_key=df_date_key)
         elif _start >= df_start and df_end < _end:
@@ -318,7 +319,7 @@ def dump_kline_df(dump_df, symbol_key, date_key):
             # 选取dump_df.date > df_end部分
             new_df = dump_df[dump_df.date > df_end]
             # concat连起来两部分
-            new_df = pd.concat([h5_df, new_df])
+            new_df = pd.concat([h5_df, new_df],sort=False)
             # 最终保存的为new_df
             dump_kline_func(symbol_key, date_key, new_df, delete_key=df_date_key)
         else:
@@ -327,6 +328,7 @@ def dump_kline_df(dump_df, symbol_key, date_key):
             # date_key 取和之前一摸一样的
 
             date_key = '{}_{}_{}'.format(symbol_key, df_start, df_end)
+            local_df = load_kline_func(df_date_key[0])
             local_df = load_kline_func(df_date_key[0])
             local_df_st = local_df[local_df.date < _start]
             local_df_ed = local_df[local_df.date > _end]
@@ -416,9 +418,14 @@ def load_kline_df_net(source, temp_symbol, n_folds, start, end, start_int, end_i
 
     if data_source.check_support():
         # 通过数据源混入的SupportMixin类检测数据源是否支持temp_symbol对应的市场数据
-        df = data_source.kline(n_folds=n_folds, start=start, end=end)
-
-    if df is not None and save:
+        # df = data_source.kline(n_folds=n_folds, start=start, end=end)
+        df = getJiJinData4JueJin(temp_symbol.symbol_code, start, end)
+        if df is None or len(df)==0:
+            pass
+            # df_temp = getJiJinData4JueJin(temp_symbol.symbol_code, start, end)
+            # if not (df_temp is None or len(df_temp) == 0 or df_temp.size == 0):
+            #     df = df_temp
+    if df is not None and len(df) > 0 and save:
         """
             这里的start_int， end_int会记作下次读取的df_req_start, df_req_end，即就是没有完整的数据返回，也可通过索引匹配上，
             即如果今天刚刚请求了直到今天为止的数据，但是数据源没有返回到今天的数据，今天的还没有，但是由于记录了end_int为今天，所以
@@ -426,4 +433,10 @@ def load_kline_df_net(source, temp_symbol, n_folds, start, end, start_int, end_i
         """
         df_key = _kl_unique_key(temp_symbol, start_int, end_int)
         dump_kline_df(df, temp_symbol.value, df_key)
+    else:
+        pass
+        # from abupy.CoreBu.ABuStore import get_and_store_jijin_data
+        # df = get_and_store_jijin_data(temp_symbol.symbol_code, startDate=start, endDate=end)
+    if df is None or len(df) == 0 or df.size == 0:
+        print("--------- kl_pd_len == 0 ,无数据。  stockCode={}".format(temp_symbol.symbol_code))
     return df

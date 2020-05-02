@@ -70,6 +70,19 @@ class AbuMetricsBase(object):
                 metrics.plot_sharp_volatility_cmp(only_info=only_info)
         return metrics
 
+    @classmethod
+    def show_orders(cls, orders_pd, action_pd, capital, benchmark, returns_cmp=False,
+                     only_info=False, only_show_returns=False, enable_stocks_full_rate_factor=False):
+        """
+        类方法，订单数据度量
+        """
+        metrics = cls(orders_pd, action_pd, capital, benchmark,
+                      enable_stocks_full_rate_factor=enable_stocks_full_rate_factor)
+        metrics.fit_order_metrics()
+        metrics.plot_order_returns_cmp(only_info=only_info)
+
+        return metrics
+
     def __init__(self, orders_pd, action_pd, capital, benchmark, enable_stocks_full_rate_factor=False):
         """
         :param orders_pd: 回测结果生成的交易订单构成的pd.DataFrame对象
@@ -82,6 +95,7 @@ class AbuMetricsBase(object):
         self.orders_pd = orders_pd
         self.action_pd = action_pd
         self.benchmark = benchmark
+
         """
             满仓乘数，如果设置为True, 针对度量信息如收益等需要除self.stocks_full_rate_factor
         """
@@ -90,6 +104,7 @@ class AbuMetricsBase(object):
         self.valid = False
         if self.orders_pd is not None and self.capital is not None and 'capital_blance' in self.capital.capital_pd:
             self.valid = True
+            self.orders_count = self.orders_pd.shape[0]
         # ipython notebook下使用logging.info
         self.log_func = logging.info if ABuEnv.g_is_ipython else print
 
@@ -106,6 +121,11 @@ class AbuMetricsBase(object):
         self._metrics_action_stats()
         # pg.show(95)
         self._metrics_extend_stats()
+
+    @valid_check
+    def fit_order_metrics(self):
+        """执行所有度量函数"""
+        self._metrics_sell_stats()
 
     def fit_metrics_order(self):
         """对外接口，并非度量真实成交了的结果，只度量orders_pd，即不涉及资金的度量"""
@@ -184,6 +204,85 @@ class AbuMetricsBase(object):
 
     def _metrics_sell_stats(self):
         """并非度量真实成交了的结果，只度量orders_pd，即认为没有仓位管理和资金量限制前提下的表现"""
+
+        # 根据order中的数据，计算盈利比例
+        self.orders_pd['profit_cg'] = self.orders_pd['profit'] / (
+            self.orders_pd['buy_price'] * self.orders_pd['buy_cnt'])
+        # 为了显示方便及明显
+        self.orders_pd['profit_cg_hunder'] = self.orders_pd['profit_cg'] * 100
+        # 成交了的pd isin win or loss
+        deal_pd = self.orders_pd[self.orders_pd['sell_type'].isin(['win', 'loss'])]
+        # 卖出原因get_dummies进行离散化
+        dumm_sell = pd.get_dummies(deal_pd.sell_type_extra)
+        dumm_sell_t = dumm_sell.T
+        # 为plot_sell_factors函数生成卖出生效因子分布
+        self.dumm_sell_t_sum = dumm_sell_t.sum(axis=1)
+
+        # 买入因子唯一名称get_dummies进行离散化
+        dumm_buy = pd.get_dummies(deal_pd.buy_factor)
+        dumm_buy = dumm_buy.T
+        # 为plot_buy_factors函数生成卖出生效因子分布
+        self.dumm_buy_t_sum = dumm_buy.sum(axis=1)
+
+        self.orders_pd['buy_date'] = self.orders_pd['buy_date'].astype(int)
+        self.orders_pd[self.orders_pd['result'] != 0]['sell_date'].astype(int, copy=False)
+        # 因子的单子的持股时间长度计算
+        self.orders_pd['keep_days'] = self.orders_pd.apply(lambda x:
+                                                           ABuDateUtil.diff(x['buy_date'],
+                                                                            ABuDateUtil.current_date_int()
+                                                                            if x['result'] == 0 else x[
+                                                                                'sell_date']),
+                                                           axis=1)
+        # 筛出已经成交了的单子
+        self.order_has_ret = self.orders_pd[self.orders_pd['result'] != 0]
+
+        # 筛出未成交的单子
+        self.order_keep = self.orders_pd[self.orders_pd['result'] == 0]
+
+        xt = self.order_has_ret.result.value_counts()
+        # 计算胜率
+        if xt.shape[0] == 2:
+            win_rate = xt[1] / xt.sum()
+        elif xt.shape[0] == 1:
+            win_rate = xt.index[0]
+        else:
+            win_rate = 0
+        self.win_rate = win_rate
+        self.buy_factor = self.orders_pd.head(1)['buy_factor'].values[0]
+        # 策略持股天数平均值
+        self.keep_days_mean = self.orders_pd['keep_days'].mean()
+        # 策略持股天数中位数
+        self.keep_days_median = self.orders_pd['keep_days'].median()
+
+        # 策略期望收益
+        self.gains_mean = self.order_has_ret[self.order_has_ret['profit_cg'] > 0].profit_cg.mean()
+        if np.isnan(self.gains_mean):
+            self.gains_mean = 0.0
+        # 策略期望亏损
+        self.losses_mean = self.order_has_ret[self.order_has_ret['profit_cg'] < 0].profit_cg.mean()
+        if np.isnan(self.losses_mean):
+            self.losses_mean = 0.0
+
+        # 忽略仓位控的前提下，即假设每一笔交易使用相同的资金，策略的总获利交易获利比例和
+        profit_cg_win_sum = self.order_has_ret[self.order_has_ret['profit_cg'] > 0].profit.sum()
+        # 忽略仓位控的前提下，即假设每一笔交易使用相同的资金，策略的总亏损交易亏损比例和
+        profit_cg_loss_sum = self.order_has_ret[self.order_has_ret['profit_cg'] < 0].profit.sum()
+
+        if profit_cg_win_sum * profit_cg_loss_sum == 0 and profit_cg_win_sum + profit_cg_loss_sum > 0:
+            # 其中有一个是0的，要转换成一个最小统计单位计算盈亏比，否则不需要
+            if profit_cg_win_sum == 0:
+                profit_cg_win_sum = 0.01
+            if profit_cg_loss_sum == 0:
+                profit_cg_win_sum = 0.01
+
+        #  忽略仓位控的前提下，计算盈亏比
+        self.win_loss_profit_rate = 0 if profit_cg_loss_sum == 0 else -round(profit_cg_win_sum / profit_cg_loss_sum, 4)
+        #  忽略仓位控的前提下，计算所有交易单的盈亏总会
+        self.all_profit = self.order_has_ret['profit'].sum()
+
+
+    def _metrics_sell_order_stats(self):
+        """度量orders_pd，认为没有仓位管理和资金量限制前提下的表现"""
 
         # 根据order中的数据，计算盈利比例
         self.orders_pd['profit_cg'] = self.orders_pd['profit'] / (

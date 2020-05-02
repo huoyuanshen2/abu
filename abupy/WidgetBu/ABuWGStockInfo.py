@@ -125,9 +125,9 @@ class WidgetStockInfo(WidgetBase):
 
     def stock_base_info(self, symbol_code):
         """构建股票基本信息：公司简介，业务，市值，市盈率，市净率，每股净资产，流通股本，总股本，机构持股等信息"""
-        if not ABuEnv.g_is_ipython:
-            logging.info('widget op only support ipython env!')
-            return
+        # if not ABuEnv.g_is_ipython:
+        #     logging.info('widget op only support ipython env!')
+        #     return
 
         stock_info = query_stock_info(symbol_code)
         if stock_info is None or stock_info.empty:

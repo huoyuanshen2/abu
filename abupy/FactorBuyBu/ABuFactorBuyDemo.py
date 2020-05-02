@@ -53,6 +53,7 @@ class AbuSDBreak(AbuFactorBuyXD, BuyCallMixin):
         # 通过大盘最近一个月的收盘价格做为参数构造AbuTLine对象
         benchmark_month_line = AbuTLine(benchmark_month.close, 'benchmark month line')
         # 计算这个月最少需要几次拟合才能代表走势曲线
+        # least = benchmark_month_line.show_least_valid_poly(show=True)
         least = benchmark_month_line.show_least_valid_poly(show=False)
 
         if least >= self.poly:

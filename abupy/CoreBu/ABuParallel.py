@@ -90,11 +90,12 @@ else:
                 for jb in iterable:
                     result.append(jb[0](*jb[1], **jb[2]))
             else:
-                with ProcessPoolExecutor(max_workers=self.n_jobs) as pool:
-                    for jb in iterable:
-                        # 这里iterable里每一个元素是delayed.delayed_function保留的tuple
-                        future_result = pool.submit(jb[0], *jb[1], **jb[2])
-                        future_result.add_done_callback(when_done)
+                # if __name__ == "__main__":
+                    with ProcessPoolExecutor(max_workers=self.n_jobs) as pool:
+                        for jb in iterable:
+                            # 这里iterable里每一个元素是delayed.delayed_function保留的tuple
+                            future_result = pool.submit(jb[0], *jb[1], **jb[2])
+                            future_result.add_done_callback(when_done)
             return result
 
 

@@ -27,6 +27,8 @@ K_GEN_FACTOR_PARAMS_BUY = 0
 K_GEN_FACTOR_PARAMS_SELL = 1
 
 
+def gen_factor_grid_4_jijin( factors, need_empty_sell=False):
+    return gen_factor_grid(K_GEN_FACTOR_PARAMS_BUY, factors, need_empty_sell=False)
 def gen_factor_grid(type_param, factors, need_empty_sell=False):
     """
     :param type_param: grid目标，为K_GEN_FACTOR_PARAMS_BUY或K_GEN_FACTOR_PARAMS_SELL需要重构

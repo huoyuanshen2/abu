@@ -150,7 +150,7 @@ plot_html_symbol = partial(plot_candle_from_symbol, html_bk=True)
 plot_symbol = partial(plot_candle_from_symbol, html_bk=False)
 
 
-def plot_candle_form_klpd(kl_pd, day_sum=False, html_bk=False, view_indexs=None, save=False, name=None):
+def plot_candle_form_klpd(kl_pd, day_sum=False, html_bk=False, view_indexs=None, save=False, name=None,bench=None,order=None):
     """
 
     :param kl_pd: 金融时间序列，pd.DataFrame对象
@@ -164,10 +164,11 @@ def plot_candle_form_klpd(kl_pd, day_sum=False, html_bk=False, view_indexs=None,
     fn = name if name else kl_pd.name if hasattr(kl_pd, 'name') else 'stock'
     plot_candle_stick(kl_pd.index, kl_pd['open'].values, kl_pd['high'].values, kl_pd['low'].values,
                       kl_pd['close'].values, kl_pd['volume'].values, view_indexs,
-                      fn, day_sum, html_bk, save)
+                      fn, day_sum, html_bk, save,kl_pd=kl_pd,bench=bench,order=order)
 
 
-def plot_candle_stick(date, p_open, high, low, close, volume, view_index, symbol, day_sum, html_bk, save, minute=False):
+def plot_candle_stick(date, p_open, high, low, close, volume, view_index, symbol, day_sum, html_bk,
+                      save, minute=False,kl_pd = None,bench=None,order=None):
     """
     展开各个k图绘制数据进行绘制
     :param date: 金融时间序列交易日时间，pd.DataFrame.index对象
@@ -186,7 +187,8 @@ def plot_candle_stick(date, p_open, high, low, close, volume, view_index, symbol
     """
     if html_bk is False:
         # 绘制不可交互的
-        _do_plot_candle(date, p_open, high, low, close, volume, view_index, symbol, day_sum, save, minute)
+        _do_plot_candle(date, p_open, high, low, close, volume, view_index, symbol, day_sum,
+                        save, minute,kl_pd=kl_pd,bench=bench,order=order)
     else:
         # 通过bk绘制可交互的
         _do_plot_candle_html(date, p_open, high, low, close, symbol, save)
@@ -231,7 +233,8 @@ def _do_plot_candle_html(date, p_open, high, low, close, symbol, save):
         bp.output_file(html_name, title=symbol)
 
 
-def _do_plot_candle(date, p_open, high, low, close, volume, view_index, symbol, day_sum, save, minute):
+def _do_plot_candle(date, p_open, high, low, close, volume, view_index, symbol, day_sum, save,
+                    minute,kl_pd=None,bench=None,order=None):
     """
     绘制不可交互的k线图
     param date: 融时间序列交易日时间，pd.DataFrame.index对象
@@ -259,7 +262,10 @@ def _do_plot_candle(date, p_open, high, low, close, volume, view_index, symbol, 
     if not g_only_draw_price:
         # 成交量，价格都绘制
         # noinspection PyTypeChecker
-        fig, (ax1, ax2) = plt.subplots(2, sharex=True, figsize=(20, 12))
+        if bench is not None:
+            fig, (ax0,ax1, ax2) = plt.subplots(3, sharex=True, figsize=(20, 12))
+        else:
+            fig, (ax1, ax2) = plt.subplots(2, sharex=True, figsize=(20, 12))
     else:
         # 只绘制价格
         fig, ax1 = plt.subplots(figsize=(6, 6))
@@ -281,6 +287,26 @@ def _do_plot_candle(date, p_open, high, low, close, volume, view_index, symbol, 
             qutotes.append(val)
         # mpf.candlestick_ochl即数据顺序为开收高低
         mpf.candlestick_ochl(ax1, qutotes, width=0.6, colorup=__colorup__, colordown=__colordown__)
+        if bench is not None:
+            qutotes2 = []
+            for index, (d, o, c, h, l) in enumerate(zip(date, bench.open, bench.close, bench.high, bench.low)):
+                d = index if minute else dt.date2num(d)
+                val = (d, o, c, h, l)
+                qutotes2.append(val)
+            mpf.candlestick_ochl(ax0, qutotes2, width=0.6, colorup=__colorup__, colordown=__colordown__)
+            ax0.set_title('benchMark')
+            ax0.set_ylabel('ochl')
+            ax0.grid(True)
+            if not minute:
+                ax0.xaxis_date()
+
+        if kl_pd is not None:
+            if 'ema10'in kl_pd.columns :
+                ax1.plot(kl_pd.index, kl_pd['ema10'], label='ema10')
+            if 'ema60' in kl_pd.columns:
+                ax1.plot(kl_pd.index, kl_pd['ema60'], label='ema60')
+            if 'bigWave2Close2' in kl_pd.columns:
+                ax1.plot(kl_pd.index, kl_pd['bigWave2Close2'], label='bigWave2Close2')
 
     if not g_only_draw_price:
         # 开始绘制成交量
@@ -290,6 +316,17 @@ def _do_plot_candle(date, p_open, high, low, close, volume, view_index, symbol, 
         if not minute:
             ax1.xaxis_date()
         if view_index is not None:
+            if order is not None:
+                kl_pd_temp = kl_pd[kl_pd.index.isin(view_index)]
+                kl_pd_temp['buy_price' ]= order.buy_price
+                kl_pd_temp['sell_price'] = order.sell_price
+                kl_pd_temp['persent+5'] = order.buy_price*(1.05)
+                kl_pd_temp['persent-5'] = order.buy_price*(0.95)
+                if order is not None:
+                    ax1.plot(view_index, kl_pd_temp['buy_price' ],'b-', label='buy_price')
+                    ax1.plot(view_index, kl_pd_temp['sell_price' ], 'y-',label='sell_price')
+                    ax1.plot(view_index, kl_pd_temp['persent+5' ], 'g--',label='persent+5')
+                    ax1.plot(view_index, kl_pd_temp['persent-5' ], 'g--',label='persent-5')
             # 开始绘制买入交易日，卖出交易日，重点突出的点位
             e_list = date.tolist()
             # itertools.cycle循环使用备选的颜色
@@ -302,14 +339,30 @@ def _do_plot_candle(date, p_open, high, low, close, volume, view_index, symbol, 
                     # 向前倒一个
                     v_ind = len(close) - 1
                 label = symbol + ': ' + str(date[v_ind])
-                ax1.plot(v, close[v_ind], 'ro', markersize=12, markeredgewidth=4.5,
-                         markerfacecolor='None', markeredgecolor=csColor, label=label)
+                ax1.plot(v, (close[v_ind]-close.min())*3/4+close.min(), 'ro', markersize=2, markeredgewidth=5,
+                         markerfacecolor='None', markeredgecolor='red', label=label)
 
+                if bench is not None:
+                    ax0.plot(v, (bench.close[v_ind]-bench.close.min())*3/4+bench.close.min(), 'ro', markersize=2, markeredgewidth=5,
+                             markerfacecolor='None', markeredgecolor='red', label=label)
+                    ax0.plot(v, (bench.close[v_ind] ) , 'r--', markersize=2,
+                             markeredgewidth=5,
+                             markerfacecolor='None', markeredgecolor='red', label=label)
+                    ax0.plot(v, bench.close[v_ind], 'g--', label='persent19')
+                    bench_temp = bench[bench.index.isin(view_index)]
+                    bench_temp['middle_line'] = (bench.close.min() + bench.close.max())/2
+                    bench_temp['persent+5'] = (bench.close.min() + bench.close.max())/2 * (1.02)
+                    bench_temp['persent-5'] = (bench.close.min() + bench.close.max())/2 * (0.98)
+                    if order is not None:
+                        ax0.plot(view_index, bench_temp['middle_line'], 'b-', label='middle_line')
+                        ax0.plot(view_index, bench_temp['persent+5'], 'y-', label='persent+5')
+                        ax0.plot(view_index, bench_temp['persent-5'], 'g--', label='persent-5')
+                    # ax0.plot(v, bench.close[v_ind]*1.05, 'g--', label='persent5')
                 # 因为candlestick_ochl 不能label了，所以使用下面的显示文字
                 # noinspection PyUnboundLocalVariable
-                ax2.plot(v, 0, 'ro', markersize=12, markeredgewidth=0.5,
-                         markerfacecolor='None', markeredgecolor=csColor, label=label)
-            plt.legend(loc='best')
+                ax2.plot(v, 0, 'ro', markersize=12, markeredgewidth=3,
+                         markerfacecolor='None', markeredgecolor='blue', label=label)
+                plt.legend(loc='best')
 
         # 成交量柱子颜色，收盘价格 > 开盘，即红色
         # noinspection PyTypeChecker

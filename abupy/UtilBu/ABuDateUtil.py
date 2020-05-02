@@ -102,6 +102,35 @@ def date_str_to_int(date_str, split='-', fix=True):
     return int(string_date)
 
 
+def date_time_str_to_time_str(date_str, split='-', fix=True):
+    """
+    eg. 2016-01-01 20:20:00-> 202000
+    """
+    date_str = date_time_str_to_int(date_str, split='-', fix=True)
+    string_date = str(date_str)[8:14]
+    return string_date
+
+def date_time_str_to_time_int(date_str, split='-', fix=True):
+    return int(date_time_str_to_time_str(date_str, split='-', fix=fix))
+
+def date_time_str_to_int(date_str, split='-', fix=True):
+    """
+    eg. 2016-01-01 20:20:00-> 20160101202000
+    不使用时间api，直接进行字符串解析，执行效率高
+    :param date_str: %Y-%m-%d形式时间str对象
+    :param split: 年月日的分割符，默认'-'
+    :param fix: 是否修复日期不规范的写法，eg. 2016-1-1 fix 2016-01-01
+    :return: int类型时间
+    """
+    if fix and split == '-':
+        # 只针对%Y-%m-%d形式格式标准化日期格式
+        date_str = fix_date_time(date_str)
+    date_str = date_str.replace(split, '')
+    date_str = date_str.replace(' ', '')
+    date_str = date_str.replace(':', '')
+    string_date = date_str[0:14]
+    return int(string_date)
+
 def fix_date(date_str):
     """
     修复日期不规范的写法:
@@ -136,6 +165,50 @@ def fix_date(date_str):
         date_str = "%s-%s-%s" % (y, m, d)
     return date_str
 
+
+
+def fix_date_time(date_str):
+    """
+    2016-10-01 20:20:20 => 20161001202020
+    """
+    if date_str is not None:
+        # 如果是字符串先统一把除了数字之外的都干掉，变成干净的数字串
+        if isinstance(date_str, six.string_types):
+            # eg, 2016:01-01, 201601-01, 2016,01 01, 2016/01-01 -> 20160101
+            date_str = ''.join(list(filter(lambda c: c.isdigit(), date_str)))
+        # 再统一确定%Y-%m-%d形式
+        date_str = fmt_date_time(date_str)
+        # y, m, d = date_str.split('-')
+        # if len(m) == 1:
+        #     # 月上补0
+        #     m = '0{}'.format(m)
+        # if len(d) == 1:
+        #     # 日上补0
+        #     d = '0{}'.format(d)
+        # date_str = "%s-%s-%s" % (y, m, d)
+    return date_str
+
+
+def fmt_date_time(convert_date):
+    """
+    """
+    if isinstance(convert_date, float):
+        # float先转换int
+        convert_date = int(convert_date)
+    convert_date = str(convert_date)
+
+    if len(convert_date) > 8 and convert_date.startswith('20'):
+        # eg '20160310000000000'
+        convert_date = convert_date[:14]
+
+    if '-' not in convert_date:
+        if len(convert_date) == 14:
+            # 20160101 to 2016-01-01
+            convert_date = "%s-%s-%s %s:%s:%s" % (convert_date[0:4],
+                                         convert_date[4:6], convert_date[6:8], convert_date[8:10], convert_date[10:12], convert_date[12:14])
+        else:
+            raise ValueError('fmt_date: convert_date fmt error {}'.format(convert_date))
+    return convert_date
 
 def fmt_date(convert_date):
     """

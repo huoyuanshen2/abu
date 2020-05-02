@@ -8,7 +8,11 @@ import datetime
 
 import numpy as np
 import pandas as pd
+import tushare as ts
+from gm.api import set_token, get_instrumentinfos, history
 
+from abupy.UtilBu import ABuDateUtil
+from ..UtilBu.AbuJiJinDataUtil import getJiJinData
 from ..CoreBu import ABuEnv
 from ..UtilBu import ABuFileUtil
 
@@ -286,6 +290,7 @@ def store_abu_result_out_put(abu_result_tuple, show_log=True):
     date_dir = datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S_%f")
     fn = os.path.join(ABuEnv.g_project_data_dir, base_dir, date_dir, 'orders.csv')
     ABuFileUtil.ensure_dir(fn)
+    ABuFileUtil.dump_df_csv(fn, abu_result_tuple.orders_pd)
 
     fn = os.path.join(ABuEnv.g_project_data_dir, base_dir, date_dir, 'actions.csv')
     ABuFileUtil.dump_df_csv(fn, abu_result_tuple.action_pd)
@@ -301,3 +306,161 @@ def store_abu_result_out_put(abu_result_tuple, show_log=True):
     ABuFileUtil.dump_df_csv(fn, abu_result_tuple.capital.commission.commission_df)
     if show_log:
         print('save {} suc!'.format(fn))
+
+
+def store_csv_data(pd, custom_name, show_log=True):
+    """
+    保存csv文件，自定义文件名
+    """
+    base_dir = 'out_put'
+    fn = os.path.join(ABuEnv.g_project_data_dir, base_dir, custom_name)
+    ABuFileUtil.ensure_dir(fn)
+    ABuFileUtil.dump_df_csv(fn, pd)
+    if show_log:
+        print('save {} suc!'.format(fn))
+
+def load_csv_data(file_name):
+    """
+    读取csv文件，自定义文件名
+    """
+    base_dir = 'out_put'
+    fn = os.path.join(ABuEnv.g_project_data_dir, base_dir, file_name)
+    return ABuFileUtil.load_df_csv(fn)
+
+def store_python_obj(obj, custom_name, show_log=True):
+    """
+    保存python对象，自定义文件名
+    """
+    base_dir = 'out_put'
+    fn = os.path.join(ABuEnv.g_project_data_dir, base_dir, custom_name)
+    ABuFileUtil.ensure_dir(fn)
+    ABuFileUtil.dump_pickle(obj,fn )
+    if show_log:
+        print('save {} suc!'.format(fn))
+
+def load_python_obj(file_name):
+    """
+    读取python对象，自定义文件名
+    """
+    base_dir = 'out_put'
+    fn = os.path.join(ABuEnv.g_project_data_dir, base_dir, file_name)
+    return ABuFileUtil.load_pickle(fn)
+
+
+def store_csv_detail_data(pd, custom_name,base_dir=None):
+    """
+    保存单只股票数据csv文件，自定义文件名
+    """
+    base_dir = 'csv_detail' if base_dir is None else base_dir
+    fn = os.path.join(ABuEnv.g_project_data_dir, base_dir, custom_name)
+    ABuFileUtil.ensure_dir(fn)
+    ABuFileUtil.dump_df_csv(fn, pd)
+
+def load_csv_detail_data(file_name,base_dir=None):
+    """
+    读取单只股票详细csv文件，自定义文件名
+    """
+    base_dir = 'csv_detail' if base_dir is None else base_dir
+    fn = os.path.join(ABuEnv.g_project_data_dir, base_dir, file_name)
+    return ABuFileUtil.load_df_csv(fn)
+
+def get_and_store_SHSE000001_detail_data(date):
+    return get_and_store_stock_detail_data('SHSE.000001', date, type=2)
+
+def get_and_store_stock_detail_data(stock_code,date,type=1):
+    """
+    保存单只股票数据csv文件，自定义文件名
+    tye：1:股票。2：指数。
+    """
+    fn = str(stock_code) + "_" + str(date)
+    if type != 1:
+        fn = fn.replace('.','')
+
+    pd = load_csv_detail_data(fn)
+    if pd is None:
+        set_token("8e1026d2dfd455be2e1f239e50004b35a481061e")
+        if type == 1:
+            symbols = ['SZSE.'+str(stock_code),'SHSE.'+str(stock_code)]
+            data = get_instrumentinfos(symbols=symbols, exchanges=None, sec_types=1, names=None, fields=None, df=True)
+            symbol = data[data.sec_id == str(stock_code)].symbol.values[0]
+        else:
+            symbol = stock_code
+        start_date = datetime.datetime.strptime(date, '%Y-%m-%d').date()
+        end_date = start_date + datetime.timedelta(days=1)
+        pd = history(symbol, "60s", start_date, end_date, fields=None, skip_suspended=True,
+                        fill_missing=None, adjust=0, adjust_end_time='', df=True)
+
+        # pd = ts.get_tick_data(stock_code, date=date, src='tt')
+        if pd is None:
+            return None
+        else :
+            pd = cacle_column(pd,fn)
+            return pd
+    else:
+        pd = cacle_column(pd,fn)
+        return pd
+
+def cacle_column(pd,fn):
+    if not "p_change" in pd.columns:
+        if len(pd) == 0:
+            return pd
+        pd['p_change'] = (pd.close - pd['close'][0]) / pd['close'][0]
+        pd['p_change_5ma'] = pd.p_change.rolling(window=5).mean()
+        pd['p_change_10ma'] = pd.p_change.rolling(window=10).mean()
+        pd['p_change_30ma'] = pd.p_change.rolling(window=30).mean()
+        pd['p_change_60ma'] = pd.p_change.rolling(window=60).mean()
+
+        pd['volume_5ma'] = pd.volume.rolling(window=5).mean()
+        pd['volume_10ma'] = pd.volume.rolling(window=10).mean()
+        pd['volume_30ma'] = pd.volume.rolling(window=30).mean()
+        pd['volume_60ma'] = pd.volume.rolling(window=60).mean()
+
+        pd['p_change_5ma_up_rate'] = (pd.p_change_5ma - pd.p_change_5ma.shift(1))
+        pd['p_change_10ma_up_rate'] = (pd.p_change_10ma - pd.p_change_10ma.shift(1))
+        pd['p_change_30ma_up_rate'] = (pd.p_change_30ma - pd.p_change_30ma.shift(1))
+        pd['p_change_60ma_up_rate'] = (pd.p_change_60ma - pd.p_change_60ma.shift(1))
+
+        pd['volume_5ma_up_rate'] = (pd.volume_5ma - pd.volume_5ma.shift(1))
+        pd['volume_10ma_up_rate'] = (pd.volume_10ma - pd.volume_10ma.shift(1))
+        pd['volume_30ma_up_rate'] = (pd.volume_30ma - pd.volume_30ma.shift(1))
+        pd['volume_60ma_up_rate'] = (pd.volume_60ma - pd.volume_60ma.shift(1))
+
+        pd['date'] = pd['bob'].apply(lambda x: ABuDateUtil.date_time_str_to_int(str(x)))
+        pd['time'] = pd['bob'].apply(lambda x: ABuDateUtil.date_time_str_to_time_int(str(x)))
+        store_csv_detail_data(pd, fn)
+    return pd
+def get_and_store_jijin_data(stock_code,startDate=None, endDate=None):
+    """
+    保存基金历史全部数据,下载慢，通过网页实现，数据全，但无最新数据。
+    """
+    fn = str(stock_code)
+    base_dir='jiJinDataDir'
+    kl_pd = load_csv_detail_data(fn,base_dir=base_dir)
+    if kl_pd is None:
+        kl_pd = getJiJinData(stock_code)
+    else:
+        lastDate = datetime.datetime.strptime(kl_pd.date_old.max(), '%Y-%m-%d')
+        todayDate = datetime.datetime.now()
+        dif_day = todayDate - lastDate
+        if dif_day.days == 1:
+            pass
+        else:
+            pages = int(dif_day.days/20)+1
+            kl_pd_new = getJiJinData(stock_code,pages=pages)
+            kl_pd_new = kl_pd_new[kl_pd_new['date_old'] > kl_pd.date_old.max()]
+            if kl_pd is not None:
+                kl_pd = pd.concat([kl_pd_new, kl_pd])
+        dates_pd = pd.to_datetime(kl_pd.date_old)
+        kl_pd.set_index(dates_pd, drop=True, append=False, inplace=True, verify_integrity=False)
+        kl_pd.index.name = 'index_name'
+        kl_pd.name=stock_code
+    if kl_pd is None or len(kl_pd) == 0:
+        return None
+    else:
+        store_csv_detail_data(kl_pd, fn, base_dir=base_dir)
+
+    kl_pd=kl_pd[kl_pd['date_old'] >= startDate]
+    kl_pd=kl_pd[kl_pd['date_old'] <= endDate]
+    return kl_pd
+
+

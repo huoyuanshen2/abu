@@ -42,7 +42,8 @@ class WidgetUpdate(WidgetBase, WidgetTimeModeMixin):
             value=ABuEnv.g_market_target.value,
             description=u'下载更新市场:',
         )
-        self.market.observe(self.on_market_change, names='value')
+        self.market.observe(self.on_market_change
+                            , names='value')
 
         """数据源进行切换"""
         self.data_source_accordion = widgets.Accordion()

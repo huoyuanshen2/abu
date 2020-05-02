@@ -70,7 +70,7 @@ class AbuFactorBuyBase(six.with_metaclass(ABCMeta, AbuParamBase)):
         且选股因子动态在择时周期内每月或者每周根据策略重新进行选股。
     """
 
-    def __init__(self, capital, kl_pd, combine_kl_pd, benchmark, **kwargs):
+    def __init__(self, capital, kl_pd, combine_kl_pd,pre_kl_pd, benchmark, **kwargs):
         """
         :param capital:资金类AbuCapital实例化对象
         :param kl_pd:择时时段金融时间序列，pd.DataFrame对象
@@ -81,6 +81,7 @@ class AbuFactorBuyBase(six.with_metaclass(ABCMeta, AbuParamBase)):
         self.kl_pd = kl_pd
         # 机器学习特征数据构建需要，详情见make_buy_order_ml_feature中构造特征使用
         self.combine_kl_pd = combine_kl_pd
+        self.pre_kl_pd = pre_kl_pd
         # 资金情况数据
         self.capital = capital
         # 交易基准对象，AbuBenchmark实例对象, 因子可有选择性使用，比如大盘对比等功能
@@ -96,7 +97,7 @@ class AbuFactorBuyBase(six.with_metaclass(ABCMeta, AbuParamBase)):
         # 默认的factor_name，子类通过_init_self可覆盖更具体的名字
         self.factor_name = '{}'.format(self.__class__.__name__)
 
-        # 忽略的交易日数量
+        # # 忽略的交易日数量
         self.skip_days = 0
         # 是否封锁本源择时买入因子的执行，此值只通过本源择时买入因子附属的选股因子进行改变
         self.lock_factor = False
@@ -210,7 +211,7 @@ class AbuFactorBuyBase(six.with_metaclass(ABCMeta, AbuParamBase)):
 
     __repr__ = __str__
 
-    def make_buy_order(self, day_ind=-1):
+    def make_buy_order(self, day_ind=-1,usePrice=0):
         """
         根据交易发生的时间索引，依次进行交易订单生成，交易时间序列特征生成，
         决策交易是否拦截，生成特征学习数据，最终返回order，即订单生效
@@ -222,7 +223,7 @@ class AbuFactorBuyBase(six.with_metaclass(ABCMeta, AbuParamBase)):
 
         order = AbuOrder()
         # AbuOrde对象根据交易发生的时间索引生成交易订单
-        order.fit_buy_order(day_ind, self)
+        order.fit_buy_order(day_ind, self,usePrice=usePrice)
 
         if order.order_deal:
             # 交易时间序列特征生成
@@ -436,15 +437,23 @@ class AbuFactorBuyXD(AbuFactorBuyBase):
         # 今天这个交易日在整个金融时间序列的序号
         self.today_ind = int(today.key)
         # 回测中默认忽略最后一个交易日
-        if self.today_ind >= self.kl_pd.shape[0] - 1:
-            return None
-
+        if self.onlyLastDate :#仅处理最后一天数据
+            if self.today_ind < self.kl_pd.shape[0] - 1:
+                return None
+        else:
+            if self.today_ind >= self.kl_pd.shape[0] - 1:
+                return None
         # 忽略不符合买入的天（统计周期内前xd天）
         if self.today_ind < self.xd - 1:
             return None
 
         # 完成为fit_day中切片周期金融时间序列数据
         self.xd_kl = self.kl_pd[self.today_ind - self.xd + 1:self.today_ind + 1]
+        # self.combine_kl_pd = self.combine_kl_pd
+        # 为fit_day中截取昨天
+        self.yesterday = self.kl_pd.iloc[self.today_ind - 1]
+        # 为fit_day中截取前天
+        self.bf_yesterday = self.kl_pd.iloc[self.today_ind - 2]
 
         return self.fit_day(today)
 
@@ -455,22 +464,23 @@ class AbuFactorBuyXD(AbuFactorBuyBase):
         :return 生成的交易订单AbuOrder对象
         """
 
-        self.skip_days = self.xd
+        self.skip_days = self.skip_days_value if hasattr(self,'skip_days_value') else self.xd
         return self.make_buy_order(self.today_ind)
 
-    def buy_today(self):
+    def buy_today(self,usePrice=0):
         """
         覆盖base函数，今天即进行买入操作，需要不能使用今天的收盘数据等做为fit_day中信号判断，
         适合如比特币非明确一天交易日时间或者特殊情况的买入信号，，使用周期参数xd赋予skip_days
         :return 生成的交易订单AbuOrder对象
         """
-        self.skip_days = self.xd
-        return self.make_buy_order(self.today_ind - 1)
+        self.skip_days = self.skip_days_value if hasattr(self,'skip_days_value') else self.xd
+        return self.make_buy_order(self.today_ind - 1,usePrice=usePrice)
 
     def _init_self(self, **kwargs):
         """子类因子针对可扩展参数的初始化"""
         # 突破周期参数 xd， 比如20，30，40天...突破, 不要使用kwargs.pop('xd', 20), 明确需要参数xq
-        self.xd = kwargs['xd']
+        self.xd = kwargs.pop('xd',0)
+        self.onlyLastDate = kwargs.pop('onlyLastDate', False)
         # 在输出生成的orders_pd中显示的名字
         self.factor_name = '{}:{}'.format(self.__class__.__name__, self.xd)
 

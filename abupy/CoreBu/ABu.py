@@ -5,6 +5,7 @@ from __future__ import print_function
 
 import logging
 
+
 from ..AlphaBu.ABuPickStockMaster import AbuPickStockMaster
 from ..AlphaBu.ABuPickTimeMaster import AbuPickTimeMaster
 from ..CoreBu import ABuEnv
@@ -19,7 +20,9 @@ from ..TradeBu.ABuCapital import AbuCapital
 from ..TradeBu.ABuKLManager import AbuKLManager
 from ..UtilBu import ABuDateUtil
 from ..UtilBu import ABuProgress
-
+from ..UtilBu import AbuIndustryDataUtil
+import tushare as ts
+import pandas as pd
 __author__ = '阿布'
 __weixin__ = 'abu_quant'
 
@@ -94,10 +97,10 @@ def run_loop_back(read_cash, buy_factors, sell_factors, stock_picks=None, choice
          TODO：不能只以symbol数量进行判断，结合策略买入卖出策略数进行综合判断
     """
     win_to_one = choice_symbols is not None and len(
-        choice_symbols) < 20 and not ABuEnv.g_is_mac_os and ABuEnv.g_cpu_cnt <= 4
+        choice_symbols) < 20 and not ABuEnv.g_is_mac_os and ABuEnv.g_cpu_cnt <= 2
 
     if n_process_pick is None:
-        # 择时，选股并行操作的进程等于cpu数量, win_to_one满足情况下1个
+        # 择时，选股并行操作的进程等于cpu-1数量, win_to_one满足情况下1个
         n_process_pick = 1 if win_to_one else ABuEnv.g_cpu_cnt
     if n_process_kl is None:
         # mac系统下金融时间序列数据收集启动两倍进程数, windows只是进程数量，win_to_one满足情况下1个
@@ -115,6 +118,8 @@ def run_loop_back(read_cash, buy_factors, sell_factors, stock_picks=None, choice
     kl_pd_manager = AbuKLManager(benchmark, capital)
     # 批量获取择时kl数据
     kl_pd_manager.batch_get_pick_time_kl_pd(choice_symbols, n_process=n_process_kl)
+
+    AbuIndustryDataUtil.getIndustryData(kl_pd_manager)
 
     # 在择时之前清理一下输出, 不能wait, windows上一些浏览器会卡死
     ABuProgress.do_clear_output(wait=False)

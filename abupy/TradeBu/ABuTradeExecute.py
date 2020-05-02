@@ -49,17 +49,17 @@ def make_orders_pd(orders, kl_pd):
     ret_orders_pd = None
     for index, order in enumerate(orders):
         # 迭代order，将每一个AbuOrder对象转换为一个pd.DataFrame对象
-        order_pd = pd.DataFrame(np.array([order.buy_date, order.buy_price, order.buy_cnt, order.buy_factor,
+        order_pd = pd.DataFrame(np.array([order.buy_date,order.buy_time, order.buy_price, order.buy_cnt, order.buy_factor,
                                           order.buy_symbol, order.buy_pos,
                                           order.buy_type_str, order.expect_direction,
-                                          order.sell_type_extra, order.sell_date, order.sell_price, order.sell_type,
-                                          order.ml_features]).reshape(1, -1),
+                                          order.sell_type_extra, order.sell_date,order.sell_time,order.sell_price, order.sell_type,
+                                          order.ml_features,order.feature_score,order.feature_state,order.bigWave2Close2,order.bigWave2Close2Date,]).reshape(1, -1),
                                 index=[index],
-                                columns=['buy_date', 'buy_price', 'buy_cnt', 'buy_factor', 'symbol', 'buy_pos',
+                                columns=['buy_date','buy_time', 'buy_price', 'buy_cnt', 'buy_factor', 'symbol', 'buy_pos',
                                          'buy_type_str', 'expect_direction',
                                          'sell_type_extra',
-                                         'sell_date',
-                                         'sell_price', 'sell_type', 'ml_features'])
+                                         'sell_date','sell_time',
+                                         'sell_price', 'sell_type', 'ml_features','feature_score','feature_state','bigWave2Close2','bigWave2Close2Date'])
 
         # 从原始金融时间序列中找到key，赋予order_pd['key']
         mask = kl_pd[kl_pd['date'] == order.buy_date]
@@ -80,6 +80,10 @@ def make_orders_pd(orders, kl_pd):
     ret_orders_pd['buy_date'] = ret_orders_pd['buy_date'].astype(int)
     ret_orders_pd['buy_cnt'] = ret_orders_pd['buy_cnt'].astype(float)
     ret_orders_pd['expect_direction'] = ret_orders_pd['expect_direction'].astype(float)
+
+    ret_orders_pd['bigWave2Close2'] = ret_orders_pd['bigWave2Close2'].astype(float)
+    ret_orders_pd['bigWave2Close2Date'] = ret_orders_pd['bigWave2Close2Date'].astype(int)
+
 
     # 计算收益
     c_ss = (ret_orders_pd['sell_price'] - ret_orders_pd['buy_price']) * ret_orders_pd[

@@ -41,16 +41,18 @@ class AbuOrder(object):
     """交易订单类"""
 
     # 多个因子买入条件可能生成几百万个order对象使用__slots__降低内存消耗
-    __slots__ = ('order_deal', 'buy_symbol', 'buy_date', 'buy_factor', 'buy_factor_class',
-                 'buy_price', 'buy_cnt', 'buy_pos', 'sell_date',
+    __slots__ = ('order_deal', 'buy_symbol', 'buy_date','buy_time', 'buy_factor', 'buy_factor_class',
+                 'buy_price', 'buy_cnt', 'buy_pos', 'sell_date','sell_time',
                  'buy_type_str', 'expect_direction',
-                 'sell_type', 'keep_days', 'sell_price', 'sell_type_extra', 'ml_features')
+                 'sell_type', 'keep_days', 'sell_price', 'sell_type_extra',
+                 'ml_features','feature_score','feature_state','bigWave2Close2','bigWave2Close2Date','buy_bench_price','sell_bench_price',
+                 'stopWinSellPriceRate','stopLoseSellPriceRate','buyNextPriceGrowRate','stopLoseSellPriceRate2','inGroupNum')
 
     def __init__(self):
         """初始设置只需要将order_deal设置未成交状态"""
         self.order_deal = False
 
-    def fit_buy_order(self, day_ind, factor_object):
+    def fit_buy_order(self, day_ind, factor_object,usePrice=0):
         """
         根据买入交易日当当天数据以及买入因子，拟合计算买入订单
         :param day_ind: 买入交易发生的时间索引，即对应self.kl_pd.key
@@ -71,6 +73,10 @@ class AbuOrder(object):
         fact = slippage_class(kl_pd_buy, factor_name)
         # 执行fit_price, 计算决策买入价格
         bp = fact.fit()
+        if usePrice == 0:
+            bp = fact.fit()
+        else :
+            bp = factor_object.buyPrice
         # 如果滑点类中决定不买入，撤单子，bp就返回正无穷
         if bp < np.inf:
             """
@@ -146,6 +152,20 @@ class AbuOrder(object):
             self.buy_symbol = kl_pd.name
             # 订单写入买入日期
             self.buy_date = int(kl_pd_buy.date)
+            if hasattr(factor_object,'buyTime'):
+                self.buy_time = str(factor_object.buyTime)
+            else:
+                self.buy_time = None
+            if hasattr(factor_object,'feature_score'):
+                self.feature_score = int(factor_object.feature_score)
+            else:
+                self.feature_score = None
+
+            if hasattr(factor_object,'feature_state'):
+                self.feature_state = str(factor_object.feature_state)
+            else:
+                self.feature_state = None
+
             # 订单写入买入因子名字
             self.buy_factor = factor_name
             # 订单对象中添加买入因子类名，和buy_factor不同没有具体参数等唯一key
@@ -164,6 +184,7 @@ class AbuOrder(object):
             # 如下卖出信息具体写入在fit_sell_order中
             # 订单卖出时间
             self.sell_date = None
+            self.sell_time = None
             # 订单卖出类型，keep：持有
             self.sell_type = 'keep'
             # 交易日持有天数
@@ -179,7 +200,39 @@ class AbuOrder(object):
             # 订单形成
             self.order_deal = True
 
-    def fit_sell_order(self, day_ind, factor_object):
+            # 订单写入买入类型，call or put
+            self.buy_type_str = factor_object.buy_type_str
+            bench_pd = factor_object.benchmark.kl_pd
+            self.buy_bench_price = bench_pd[bench_pd.date == kl_pd_buy.date].close.values[0]
+            self.sell_bench_price = None
+
+            if hasattr(factor_object, 'buyNextPriceGrowRate'):
+                # 在这里遍历订单，确定订单组内号。
+                # 卖出类仅根据价格进行卖出。所有逻辑前置。
+                orders = factor_object.orders
+                ordersNew = []
+                stockCode = self.buy_symbol
+                for order in orders:
+                    if order.sell_type != 'keep':
+                        continue
+                    if order.buy_symbol == stockCode:
+                        ordersNew.append(order)
+                self.inGroupNum = len(ordersNew)
+
+            if hasattr(factor_object,'stopWinSellPriceRate'):
+                if self.inGroupNum == 0:
+                    self.stopWinSellPriceRate = factor_object.stopWinSellPriceRate
+                    self.stopLoseSellPriceRate = factor_object.stopLoseSellPriceRate
+                else:
+                    self.stopWinSellPriceRate = factor_object.stopWinSellPriceRate
+                    self.stopLoseSellPriceRate = factor_object.stopLoseSellPriceRate2
+            #大浪陶金2次起飞突破数据
+            if hasattr(factor_object, 'close2') :
+                self.bigWave2Close2 = factor_object.close2
+                self.bigWave2Close2Date = factor_object.close2Date
+
+
+    def fit_sell_order(self, day_ind, factor_object,usePrice = 0):
         """
         根据卖出交易日当当天数据以及卖出因子，拟合计算卖出信息，完成订单
         :param day_ind: 卖出交易发生的时间索引，即对应self.kl_pd.key
@@ -199,7 +252,10 @@ class AbuOrder(object):
             # 卖出因子名称
             factor_name = factor_object.factor_name if hasattr(factor_object, 'factor_name') else 'unknown'
             # 实例化日内滑点决策类，进行具体卖出价格决策
-            sell_price = slippage_class(kl_pd_sell, factor_name).fit()
+            if usePrice == 0:
+                sell_price = slippage_class(kl_pd_sell, factor_name,self).fit()
+            else:
+                sell_price = factor_object.sellPrice
 
             if sell_price == -np.inf:
                 # 如果卖出执行返回负无穷说明无法卖出，例如跌停
@@ -217,6 +273,10 @@ class AbuOrder(object):
                 self.sell_type = 'loss' if self.sell_price > self.buy_price else 'win'
             # 卖出日期写入单子
             self.sell_date = int(kl_pd_sell.date)
+            if hasattr(factor_object,'sellTime'):
+                self.sell_time = str(factor_object.sellTime)
+            else:
+                self.sell_time = None
 
     def __str__(self):
         """打印对象显示：buy_symbol， buy_price， buy_cnt， buy_date，buy_factor，sell_date，sell_type， sell_price"""
