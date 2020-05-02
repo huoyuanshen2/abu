@@ -14,3 +14,4 @@ def show_ui():
         from abupy import WidgetUpdate
         widget = WidgetUpdate()
     return widget()
+
