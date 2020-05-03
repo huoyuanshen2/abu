@@ -60,8 +60,8 @@ stockCode = data[data.trade_n == 0]
 #         data_jbm.to_sql("data_jbm"+'_'+date_str, connect, if_exists='append', index=False)
 #
 # choice_symbols = stockCode
-choice_symbols = ['002718','002719','002721','300740']
-# choice_symbols = ['300298']
+# choice_symbols = ['002718','002719','002721','300740']
+choice_symbols = ['300298']
 #
 #
 # connect = create_engine(
